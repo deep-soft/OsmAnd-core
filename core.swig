@@ -9,6 +9,8 @@
 #include <OsmAndCore/Callable.h>
 #include <OsmAndCore/CommonTypes.h>
 #include <OsmAndCore/Nullable.h>
+#include <OsmAndCore/IRequestResult.h>
+#include <OsmAndCore/IHttpRequestResult.h>
 #include <OsmAndCore/IWebClient.h>
 #include <OsmAndCore/Color.h>
 #include <OsmAndCore/PointsAndAreas.h>
@@ -160,6 +162,8 @@ using namespace OsmAnd;
 	%pointer_class(float, FloatPtr);
 	%pointer_class(double, DoublePtr);
 %include <std_shared_ptr.i>
+ 	%shared_ptr(OsmAnd::IRequestResult)
+ 	%shared_ptr(OsmAnd::IHttpRequestResult)
  	%shared_ptr(OsmAnd::IWebClient)
 	%shared_ptr(OsmAnd::IBillboardMapSymbol)
 	%shared_ptr(OsmAnd::IOnPathMapSymbol)
@@ -403,6 +407,8 @@ using namespace OsmAnd;
 	%template(MapRendererStateChanges) OsmAnd::Bitmask<OsmAnd::MapRendererStateChange, unsigned int>;
 	%template(ObfDataTypesMask) OsmAnd::Bitmask<OsmAnd::ObfDataType, unsigned int>;
 	%template(ObfAddressStreetGroupTypesMask) OsmAnd::Bitmask<OsmAnd::ObfAddressStreetGroupType, unsigned int>;
+%include <OsmAndCore/IRequestResult.h>
+%include <OsmAndCore/IHttpRequestResult.h>
 %include <OsmAndCore/IWebClient.h>
 %include <OsmAndCore/IObfsCollection.h>
 %include <OsmAndCore/ObfsCollection.h>

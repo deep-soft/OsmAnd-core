@@ -14,6 +14,7 @@
 #include <OsmAndCore/CommonSWIG.h>
 #include <OsmAndCore/IQueryController.h>
 #include <OsmAndCore/PrivateImplementation.h>
+#include <OsmAndCore/IRequestResult.h>
 
 namespace OsmAnd
 {
@@ -26,32 +27,6 @@ namespace OsmAnd
             const uint64_t transferredBytes,
             const uint64_t totalBytes)> RequestProgressCallbackSignature;
 
-        class OSMAND_CORE_API IRequestResult
-        {
-            Q_DISABLE_COPY_AND_MOVE(IRequestResult);
-
-        private:
-        protected:
-            IRequestResult();
-        public:
-            virtual ~IRequestResult();
-
-            virtual bool isSuccessful() const = 0;
-        };
-
-        class OSMAND_CORE_API IHttpRequestResult : public IRequestResult
-        {
-            Q_DISABLE_COPY_AND_MOVE(IHttpRequestResult);
-
-        private:
-        protected:
-            IHttpRequestResult();
-        public:
-            virtual ~IHttpRequestResult();
-
-            virtual unsigned int getHttpStatusCode() const = 0;
-        };
-
     private:
     protected:
         IWebClient();
@@ -60,19 +35,19 @@ namespace OsmAnd
 
         virtual QByteArray downloadData(
             const QString& url,
-            std::shared_ptr<const SWIG_CLARIFY(IWebClient, IRequestResult)>* const requestResult = nullptr,
+            std::shared_ptr<const IRequestResult>* const requestResult = nullptr,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback = nullptr,
             const std::shared_ptr<const IQueryController>& queryController = nullptr,
             const QString& userAgent = QString()) const = 0;
         virtual QString downloadString(
             const QString& url,
-            std::shared_ptr<const SWIG_CLARIFY(IWebClient, IRequestResult)>* const requestResult = nullptr,
+            std::shared_ptr<const IRequestResult>* const requestResult = nullptr,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback = nullptr,
             const std::shared_ptr<const IQueryController>& queryController = nullptr) const = 0;
         virtual bool downloadFile(
             const QString& url,
             const QString& fileName,
-            std::shared_ptr<const SWIG_CLARIFY(IWebClient, IRequestResult)>* const requestResult = nullptr,
+            std::shared_ptr<const IRequestResult>* const requestResult = nullptr,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback = nullptr,
             const std::shared_ptr<const IQueryController>& queryController = nullptr) const = 0;
     };
@@ -82,7 +57,7 @@ namespace OsmAnd
             QByteArray,
             downloadData,
             const QString& url,
-            std::shared_ptr<const IWebClient::IRequestResult>* const requestResult,
+            std::shared_ptr<const IRequestResult>* const requestResult,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback,
             const std::shared_ptr<const IQueryController>& queryController,
             const QString& userAgent);
@@ -90,7 +65,7 @@ namespace OsmAnd
             QString,
             downloadString,
             const QString& url,
-            std::shared_ptr<const IWebClient::IRequestResult>* const requestResult,
+            std::shared_ptr<const IRequestResult>* const requestResult,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback,
             const std::shared_ptr<const IQueryController>& queryController);
         SWIG_EMIT_DIRECTOR_CONST_METHOD(
@@ -98,7 +73,7 @@ namespace OsmAnd
             downloadFile,
             const QString& url,
             const QString& fileName,
-            std::shared_ptr<const IWebClient::IRequestResult>* const requestResult,
+            std::shared_ptr<const IRequestResult>* const requestResult,
             const SWIG_CLARIFY(IWebClient, RequestProgressCallbackSignature) progressCallback,
             const std::shared_ptr<const IQueryController>& queryController);
     SWIG_EMIT_DIRECTOR_END(IWebClient);

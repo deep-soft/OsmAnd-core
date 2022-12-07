@@ -131,7 +131,7 @@ bool OsmAnd::IncrementalChangesManager_P::getIncrementalUpdatesForRegion(const Q
                                                                          uint64_t timestamp,
                                                                          QList< std::shared_ptr<const IncrementalUpdate> >& resources) const
 {
-    std::shared_ptr<const IWebClient::IRequestResult> requestResult;
+    std::shared_ptr<const IRequestResult> requestResult;
     const auto& downloadResult = _webClient->downloadData(
                                                           owner->repositoryBaseUrl +
                                                           QStringLiteral("check_live?aosmc=true&timestamp=") +

@@ -121,6 +121,7 @@ namespace OsmAnd
             bool succeeded,
             int64_t requestedTime,
             double value,
+            int64_t valueDateTime,
             const std::shared_ptr<Metric>& metric);
 
         OSMAND_CALLABLE(ObtainTileDataAsyncCallback,

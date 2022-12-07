@@ -146,9 +146,10 @@ namespace OsmAnd
         PointI _cachedValuesPoint31;
         ZoomLevel _cachedValuesZoom;
         QList<double> _cachedValues;
+        int64_t _cachedValuesDateTime;
         
-        bool getCachedValues(const PointI point31, const ZoomLevel zoom, QList<double>& values);
-        void setCachedValues(const PointI point31, const ZoomLevel zoom, const QList<double>& values);
+        bool getCachedValues(const PointI point31, const ZoomLevel zoom, QList<double>& values, int64_t* pValuesDateTime);
+        void setCachedValues(const PointI point31, const ZoomLevel zoom, const QList<double>& values, const int64_t valuesDateTime);
 
         bool isEmpty();
 
@@ -227,6 +228,7 @@ namespace OsmAnd
             const TileId tileId,
             const ZoomLevel zoom,
             QByteArray& outData,
+            int64_t* pOutTime = nullptr,
             bool forceDownload = false,
             bool localData = false,
             std::shared_ptr<const IQueryController> queryController = nullptr);

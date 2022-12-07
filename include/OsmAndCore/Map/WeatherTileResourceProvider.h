@@ -119,6 +119,7 @@ namespace OsmAnd
             void,
             bool succeeded,
             const QList<double>& values,
+            int64_t valuesDateTime,
             const std::shared_ptr<Metric>& metric);
 
         OSMAND_CALLABLE(ObtainTileDataAsyncCallback,

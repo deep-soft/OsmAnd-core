@@ -743,7 +743,7 @@ void OsmAnd::ResourcesManager_P::loadLocalResourcesFromPath_OnlineTileSourcesRes
 
 const std::shared_ptr<const OsmAnd::OnlineTileSources> OsmAnd::ResourcesManager_P::downloadOnlineTileSources() const
 {
-    std::shared_ptr<const IWebClient::IRequestResult> requestResult;
+    std::shared_ptr<const IRequestResult> requestResult;
     const auto& downloadResult = _webClient->downloadData(
         QLatin1String("https://osmand.net/tile_sources?osmandver=") + owner->appVersion,
         &requestResult);

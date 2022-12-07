@@ -264,16 +264,17 @@ void OsmAnd::WeatherTileResourcesManager_P::obtainValue(
             [callback, dateTime, band]
             (const bool requestSucceeded,
                 const QList<double>& values,
+                const int64_t valuesDateTime,
                 const std::shared_ptr<Metric>& metric)
             {
-                callback(requestSucceeded, dateTime, values[band], nullptr);
+                callback(requestSucceeded, dateTime, values[band], valuesDateTime, nullptr);
             };
         
         resourceProvider->obtainValue(rr, rc);
     }
     else
     {
-        callback(false, request.dateTime, 0, nullptr);
+        callback(false, request.dateTime, 0, 0, nullptr);
     }
 }
 
@@ -298,19 +299,20 @@ void OsmAnd::WeatherTileResourcesManager_P::obtainValueAsync(
             [callback, dateTime, band]
             (const bool requestSucceeded,
                 const QList<double>& values,
+                const int64_t valuesDateTime,
                 const std::shared_ptr<Metric>& metric)
             {
                 if (requestSucceeded)
-                    callback(true, dateTime, values[band], nullptr);
+                    callback(true, dateTime, values[band], valuesDateTime, nullptr);
                 else
-                    callback(false, dateTime, 0, nullptr);
+                    callback(false, dateTime, 0, 0, nullptr);
             };
         
         resourceProvider->obtainValueAsync(rr, rc);
     }
     else
     {
-        callback(false, request.dateTime, 0, nullptr);
+        callback(false, request.dateTime, 0, 0, nullptr);
     }
 }
 
