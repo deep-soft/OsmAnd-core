@@ -49,7 +49,7 @@ OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::~AtlasMapRenderer3DModelsStage_Ope
 bool OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::initialize()
 {
     ObjParser parser(QString("./model/model.obj"), QString("./model/"));
-    _successfulLoadModel = parser.parse(_model);
+    _successfulLoadModel = parser.parse(_model, true);
 
     // Uncomment for custom coloring
     // QHash<QString, FColorRGBA> customColors;
@@ -218,20 +218,21 @@ bool OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::render(IMapRenderer_Metrics::
     GL_CHECK_RESULT;
 
     // Per-model data
-    float modelScale = 1 / currentState.visualZoom;
+    auto modelScale = 1 / currentState.visualZoom;
     const auto zoomLevel = currentState.zoomLevel;
     const auto visualZoom = currentState.visualZoom;
     const auto zoomScale = _allZoomScales.at(zoomLevel);
     
+    // Calculate scale of model using zoom level and zoom fractional part
     if (visualZoom >= 1.0f)
     {
         if (zoomLevel == MaxZoomLevel)
             modelScale *= zoomScale;
         else
         {
-            auto nextZoomScale = _allZoomScales.at(zoomLevel + 1);
-            auto deltaScale = nextZoomScale - zoomScale;
-            auto zoomFraction = visualZoom - 1.0f;
+            const auto nextZoomScale = _allZoomScales.at(zoomLevel + 1);
+            const auto deltaScale = nextZoomScale - zoomScale;
+            const auto zoomFraction = visualZoom - 1.0f;
             modelScale *= zoomScale + deltaScale * zoomFraction;
         }
     }
@@ -241,53 +242,88 @@ bool OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::render(IMapRenderer_Metrics::
             modelScale *= zoomScale;
         else
         {
-            auto prevZoomScale = _allZoomScales.at(zoomLevel - 1);
-            auto deltaScale = zoomScale - prevZoomScale;
-            auto zoomFraction = -2 * (visualZoom - 1);
+            const auto prevZoomScale = _allZoomScales.at(zoomLevel - 1);
+            const auto deltaScale = zoomScale - prevZoomScale;
+            const auto zoomFraction = -2 * (visualZoom - 1);
             modelScale *= zoomScale - deltaScale * zoomFraction;
         }
     }
 
     const auto mModelScale = glm::scale(glm::vec3(modelScale));
 
-    const QList<PointF> modelHorizontalBBox = _model->getHorizontalBBox();
-    QList<float> bboxElevationsOnRelief;
-    for (auto point : modelHorizontalBBox)
-    {
-        const auto bboxPoint = glm::vec4(point.x, 0.0f, point.y, 1.0f);
-        const auto bboxPointWorld = internalState.mAzimuth * mModelScale * bboxPoint;
+    auto modelBBox = _model->getBBox();
+    modelBBox.setScale(modelScale);
 
-        const auto tileSize31 = Utilities::getPowZoom(ZoomLevel::MaxZoomLevel - zoomLevel);
-        const auto offsetFromTargetX31 = bboxPointWorld.x * tileSize31 / AtlasMapRenderer::TileSize3D;
-        const auto offsetFromTargetY31 = bboxPointWorld.z * tileSize31 / AtlasMapRenderer::TileSize3D;
+    const auto centerElevation = getModelPointHeight(0.0f, 0.0f);
+    const auto farLeftElevation = getModelPointHeight(modelBBox.minX(), modelBBox.minZ());
+    const auto farRightElevation = getModelPointHeight(modelBBox.maxX(), modelBBox.minZ());
+    const auto nearLeftElevation = getModelPointHeight(modelBBox.minX(), modelBBox.maxZ());
+    const auto nearRightElevation = getModelPointHeight(modelBBox.maxX(), modelBBox.maxZ());
 
-        const auto bboxPointX31 = currentState.target31.x + offsetFromTargetX31;
-        const auto bboxPointY31 = currentState.target31.y + offsetFromTargetY31;
-        const PointI bboxPoint31 = PointI(static_cast<int32_t>(bboxPointX31), static_cast<int32_t>(bboxPointY31));
+    const auto leftFar = PointF(modelBBox.minX(), modelBBox.minZ());
+    const auto rightFar = PointF(modelBBox.maxX(), modelBBox.minZ());
+    const auto leftNear = PointF(modelBBox.minX(), modelBBox.maxZ());
+    const auto rightNear = PointF(modelBBox.maxX(), modelBBox.maxZ());
 
-        float elevation = AtlasMapRendererStageHelper_OpenGL::getRenderer()->getHeightOfLocation(bboxPoint31);
-        bboxElevationsOnRelief.push_back(elevation);
-    }
+    const auto leftHeights = getModelLineHeights(leftFar, leftNear);
+    const auto rightHeights = getModelLineHeights(rightFar, rightNear);
+    const auto farHeights = getModelLineHeights(leftFar, rightFar);
+    const auto nearHeights = getModelLineHeights(leftNear, rightNear);
 
-    float modelElevationOnRelief = 0.0f;
-    if (bboxElevationsOnRelief.size() == 4)
-    {
-        float elevationSum = 0.0f;
-        for (auto elevation : bboxElevationsOnRelief)
-            elevationSum += elevation;
-        modelElevationOnRelief = elevationSum / 4;
-    }
 
-    const auto baseModelOffsetY = _model->getBBox().minY * modelScale;
-    const auto modelTranslateY = modelElevationOnRelief - baseModelOffsetY;
-    const auto mModelTranslate = glm::translate(glm::vec3(0, modelTranslateY, 0));
-    const auto mFinalModel = mModelTranslate * mModelScale;
+    // Replace with sum of points on lines from above 
+    const auto avgHeight = (farLeftElevation + farRightElevation + nearLeftElevation + nearRightElevation) / 4.0f;
+    const auto modelHeight = centerElevation > avgHeight ? (avgHeight + centerElevation) / 2.0f : avgHeight;
+    const auto mModelElevationTranslate = glm::translate(glm::vec3(0.0f, modelHeight, 0.0f));
+
+    const auto leftHeightsHalfSize = leftHeights.size() / 2;
+    const auto leftHeightsFarHalf = leftHeights.mid(0, leftHeightsHalfSize);
+    const auto leftHeightsNearHalf = leftHeights.mid(leftHeights.size() - leftHeightsHalfSize, -1);
+    const auto leftHeightsFarHalfSum = std::accumulate(leftHeightsFarHalf.begin(), leftHeightsFarHalf.end(), 0.0f);
+    const auto leftHeightsNearHalfSum = std::accumulate(leftHeightsNearHalf.begin(), leftHeightsNearHalf.end(), 0.0f);
+    const auto leftHeightsAvgDiff = (leftHeightsFarHalfSum - leftHeightsNearHalfSum) / leftHeightsHalfSize;
+
+    const auto rightHeightsHalfSize = rightHeights.size() / 2;
+    const auto rightHeightsFarHalf = rightHeights.mid(0, rightHeightsHalfSize);
+    const auto rightHeightsNearHalf = rightHeights.mid(rightHeights.size() - rightHeightsHalfSize, -1);
+    const auto rightHeightsFarHalfSum = std::accumulate(rightHeightsFarHalf.begin(), rightHeightsFarHalf.end(), 0.0f);
+    const auto rightHeightsNearHalfSum = std::accumulate(rightHeightsNearHalf.begin(), rightHeightsNearHalf.end(), 0.0f);
+    const auto rightHeightsAvgDiff = (rightHeightsFarHalfSum - rightHeightsNearHalfSum) / rightHeightsHalfSize;
+
+    const auto avgElevationDiffZ = (leftHeightsAvgDiff + rightHeightsAvgDiff) / 2.0f;
+    const auto rotationAngleX = static_cast<float>(qAtan(avgElevationDiffZ / (modelBBox.lengthZ() / 2.0f)));
+    const auto mModelRotationX = glm::rotate(rotationAngleX, glm::vec3(1.0f, 0.0f, 0.0f));
+
+    const auto farHeightsHalfSize = farHeights.size() / 2;
+    const auto farHeightsLeftHalf = farHeights.mid(0, farHeightsHalfSize);
+    const auto farHeightsRightHalf = farHeights.mid(farHeights.size() - farHeightsHalfSize, -1);
+    const auto farHeightsLeftHalfSum = std::accumulate(farHeightsLeftHalf.begin(), farHeightsLeftHalf.end(), 0.0f);
+    const auto farHeightsRightHalfSum = std::accumulate(farHeightsRightHalf.begin(), farHeightsRightHalf.end(), 0.0f);
+    const auto farHeightsAvgDiff = (farHeightsRightHalfSum - farHeightsLeftHalfSum) / farHeightsHalfSize;
+
+    const auto nearHeightsHalfSize = nearHeights.size() / 2;
+    const auto nearHeightsLeftHalf = nearHeights.mid(0, nearHeightsHalfSize);
+    const auto nearHeightsRightHalf = nearHeights.mid(nearHeights.size() - nearHeightsHalfSize, -1);
+    const auto nearHeightsLeftHalfSum = std::accumulate(nearHeightsLeftHalf.begin(), nearHeightsLeftHalf.end(), 0.0f);
+    const auto nearHeightsRightHalfSum = std::accumulate(nearHeightsRightHalf.begin(), nearHeightsRightHalf.end(), 0.0f);
+    const auto nearHeightsAvgDiff = (nearHeightsRightHalfSum - nearHeightsLeftHalfSum) / nearHeightsHalfSize;
+
+    const auto avgElevationDiffX = (farHeightsAvgDiff + nearHeightsAvgDiff) / 2.0f;
+    const auto rotationAngleZ = static_cast<float>(qAtan(avgElevationDiffX / (modelBBox.lengthX() / 2.0f)));
+    const auto mModelRotationZ = glm::rotate(rotationAngleZ, glm::vec3(0.0f, 0.0f, 1.0f));
+
+    const auto mModelRotateOnRelief = mModelRotationX * mModelRotationZ;
+    const auto mModel = mModelElevationTranslate * mModelRotateOnRelief * mModelScale;
     glUniformMatrix4fv(
         _program.vs.params.mModel,
         1,
         GL_FALSE,
-        glm::value_ptr(mFinalModel));
+        glm::value_ptr(mModel));
     GL_CHECK_RESULT;
+
+    // Uncomment to debug
+    // const auto mDebugTransform = mModelElevationTranslate * mModelRotateOnRelief;
+    // addDebugLines(modelBBox, mDebugTransform, farLeftElevation, farRightElevation, nearLeftElevation, nearRightElevation);
 
     // Draw models actually
     glDrawArrays(GL_TRIANGLES, 0, _model->getVerticesCount());
@@ -337,4 +373,100 @@ bool OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::release(bool gpuContextLost)
     }
 
     return true;
+}
+
+QVector<float> OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::getModelLineHeights(const PointF& start, const PointF& end) const
+{
+    const auto deltaX = end.x - start.x;
+    const auto deltaZ = end.y - start.y;
+    const auto length = static_cast<float>(qSqrt(qPow(deltaX, 2.0f) + qPow(deltaZ, 2.0f)));
+    
+    int pointsCount = 4;
+    
+    QVector<float> heights;
+    for (auto i = 0; i < pointsCount - 1; i++)
+    {
+        const auto percent = static_cast<float>(i) / pointsCount;
+        const auto x = start.x + deltaX * percent;
+        const auto z = start.y + deltaZ * percent;
+        const auto height = getModelPointHeight(x, z);
+        heights.push_back(height);
+    }
+    heights.push_back(getModelPointHeight(end.x, end.y));
+
+    return heights;
+}
+
+float OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::getModelPointHeight(const float x, const float z) const
+{
+    const auto tileSize31 = Utilities::getPowZoom(ZoomLevel::MaxZoomLevel - currentState.zoomLevel);
+    const auto offsetFromTargetX31 = x * tileSize31 / AtlasMapRenderer::TileSize3D;
+    const auto offsetFromTargetY31 = z * tileSize31 / AtlasMapRenderer::TileSize3D;
+
+    const auto vertexX31 = currentState.target31.x + offsetFromTargetX31;
+    const auto vertexY31 = currentState.target31.y + offsetFromTargetY31;
+    const PointI vertex31 = PointI(static_cast<int32_t>(vertexX31), static_cast<int32_t>(vertexY31));
+
+    return AtlasMapRendererStageHelper_OpenGL::getRenderer()->getHeightOfLocation(vertex31);
+}
+
+void OsmAnd::AtlasMapRenderer3DModelsStage_OpenGL::addDebugLines(
+    const Model3D::BBox& modelBBox,
+    const glm::mat4& mTransform,
+    const float farLeftElevation,
+    const float farRightElevation,
+    const float nearLeftElevation,
+    const float nearRightElevation)
+{
+    const auto debugStage = AtlasMapRendererStageHelper_OpenGL::getRenderer()->debugStage;
+    const auto bboxColor = ColorARGB(255, 0, 255, 0).argb;
+
+    // Bottom quad of bbox
+    QVector<glm::vec3> lines;
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.minY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.minY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.minY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.minY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.minY(), modelBBox.minZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+
+    // Top quad of bbox
+    lines.clear();
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.maxY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.maxY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.maxY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.maxY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.maxY(), modelBBox.minZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+
+    // Vertical lines of bbox
+    lines.clear();
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.minY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.maxY(), modelBBox.minZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+    lines.clear();
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.minY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.minX(), modelBBox.maxY(), modelBBox.maxZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+    lines.clear();
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.minY(), modelBBox.minZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.maxY(), modelBBox.minZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+    lines.clear();
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.minY(), modelBBox.maxZ(), 1.0f));
+    lines.push_back(mTransform * glm::vec4(modelBBox.maxX(), modelBBox.maxY(), modelBBox.maxZ(), 1.0f));
+    debugStage->addLine3D(lines, bboxColor);
+
+    // Quad diagonals of bbox heights intersecting with relief 
+    const auto elevationColor = ColorARGB(255, 0, 0, 255).argb;
+    QVector<glm::vec3> elevations;
+
+    elevations.push_back(glm::vec4(modelBBox.minX(), farLeftElevation, modelBBox.minZ(), 1.0f));
+    elevations.push_back(glm::vec4(modelBBox.maxX(), nearRightElevation, modelBBox.maxZ(), 1.0f));
+    debugStage->addLine3D(elevations, elevationColor);
+
+    elevations.clear();
+    elevations.push_back(glm::vec4(modelBBox.minX(), nearLeftElevation, modelBBox.maxZ(), 1.0f));
+    elevations.push_back(glm::vec4(modelBBox.maxX(), farRightElevation, modelBBox.minZ(), 1.0f));
+    debugStage->addLine3D(elevations, elevationColor);
 }

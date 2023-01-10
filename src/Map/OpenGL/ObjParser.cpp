@@ -21,7 +21,7 @@ OsmAnd::ObjParser::~ObjParser()
 {
 }
 
-bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel) const
+bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel, const bool translateToSurfaceCenter) const
 {
     tinyobj::attrib_t attrib;
     std::vector<tinyobj::shape_t> shapes;
@@ -60,14 +60,13 @@ bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel) const
     }
 
     QVector<Model3D::VertexInfo> vertices;
-    Model3D::BBox bbox = {
-        .minX = attrib.vertices[0],
-        .maxX = bbox.minX,
-        .minY = attrib.vertices[1],
-        .maxY = bbox.minY,
-        .minZ = attrib.vertices[2],
-        .maxZ = bbox.minZ
-    };
+    float minX = attrib.vertices[0];
+    float maxX = minX;
+    float minY = attrib.vertices[1];
+    float maxY = minY;
+    float minZ = attrib.vertices[2];
+    float maxZ = minZ;
+
     for (auto shape : shapes)
     {
         auto mesh = shape.mesh;
@@ -91,7 +90,7 @@ bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel) const
                     break;
                 
                 auto vertexIdx = vertexOrder * vertexNumberPerFace;
-                Model3D::VertexInfo vertex = Model3D::VertexInfo {}; // or no?
+                Model3D::VertexInfo vertex;
 
                 float x = attrib.vertices[vertexIdx + 0];
                 float y = attrib.vertices[vertexIdx + 1];
@@ -101,18 +100,18 @@ bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel) const
                 vertex.xyz[1] = y;
                 vertex.xyz[2] = z;
 
-                if (x < bbox.minX)
-                    bbox.minX = x;
-                if (x > bbox.maxX)
-                    bbox.maxX = x;
-                if (y < bbox.minY)
-                    bbox.minY = y;
-                if (y > bbox.maxY)
-                    bbox.maxY = y;
-                if (z < bbox.minZ)
-                    bbox.minZ = z;
-                if (z > bbox.maxZ)
-                    bbox.maxZ = z;
+                if (x < minX)
+                    minX = x;
+                if (x > maxX)
+                    maxX = x;
+                if (y < minY)
+                    minY = y;
+                if (y > maxY)
+                    maxY = y;
+                if (z < minZ)
+                    minZ = z;
+                if (z > maxZ)
+                    maxZ = z;
 
                 if (faceMaterial)
                 {
@@ -139,6 +138,35 @@ bool OsmAnd::ObjParser::parse(std::shared_ptr<Model3D>& outModel) const
         }
     }
 
+    if (minX == maxX || minY == maxY || minZ == maxZ)
+    {
+        LogPrintf(LogSeverityLevel::Error, "3D Model cannot be flat in one of axis");
+        return false;
+    }
+
+    if (translateToSurfaceCenter)
+    {
+        const auto translateX = -(minX + (maxX - minX) / 2.0f);
+        const auto translateY = -minY;
+        const auto translateZ = -(minZ + (maxZ - minZ) / 2.0f);
+
+        for (size_t i = 0; i < vertices.size(); i++)
+        {
+            auto& vertex = vertices[i];
+            vertex.xyz[0] += translateX;
+            vertex.xyz[1] += translateY;
+            vertex.xyz[2] += translateZ;
+        }
+
+        minX += translateX;
+        maxX += translateX;
+        minY += translateY;
+        maxY += translateY;
+        minZ += translateZ;
+        maxZ += translateZ;
+    }
+
+    Model3D::BBox bbox(minX, maxX, minY, maxY, minZ, maxZ);
     outModel.reset(new Model3D(vertices, bbox));
 
     return true;

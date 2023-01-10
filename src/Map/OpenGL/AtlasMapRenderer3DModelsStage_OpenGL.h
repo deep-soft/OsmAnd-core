@@ -21,6 +21,16 @@ namespace OsmAnd
 
         bool _successfulLoadModel;
         std::shared_ptr<Model3D> _model;
+
+        QVector<float> getModelLineHeights(const PointF& start, const PointF& end) const;
+        float getModelPointHeight(const float x, const float z) const;
+        void addDebugLines(
+            const Model3D::BBox& modelBBox,
+            const glm::mat4& mTransform,
+            const float farLeftElevation,
+            const float farRightElevation,
+            const float nearLeftElevation,
+            const float nearRightElevation);
     protected:
         GLname _3DModelVAO;
         GLname _3DModelVBO;
